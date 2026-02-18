@@ -1,4 +1,17 @@
+__pycache__
 _temp/
 *.csv
 *.zip
 *.pth
+check_data_process/
+DRIVE/
+files/
+new_data/
+results/
+data_ae.py
+test_ae.py
+ckpts/
+data/
+dc_img/
+logs/
+concat_image.py
