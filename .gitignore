@@ -15,3 +15,11 @@ data/
 dc_img/
 logs/
 concat_image.py
+boyi_hw4/
+generated/
+Hw4_GAN_western_blot/
+losses/
+test_results/
+plot_losses.py
+train.pkl
+training_loss.png
