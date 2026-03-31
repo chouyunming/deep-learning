@@ -1,0 +1,114 @@
+import os
+import time
+from operator import add
+from glob import glob
+import numpy as np
+import pandas as pd
+import cv2
+import imageio
+from tqdm import tqdm
+import torch
+from sklearn.metrics import accuracy_score, f1_score, jaccard_score, precision_score, recall_score
+
+from network import UNet
+from utils import seeding, create_dir
+
+
+def calculate_metrics(y_true, y_pred):
+    y_true = (y_true.cpu().numpy() > 0.5).astype(np.uint8).reshape(-1)
+    y_pred = (y_pred.cpu().numpy() > 0.5).astype(np.uint8).reshape(-1)
+
+    return [
+        jaccard_score(y_true, y_pred),
+        f1_score(y_true, y_pred),
+        recall_score(y_true, y_pred),
+        precision_score(y_true, y_pred),
+        accuracy_score(y_true, y_pred),
+    ]
+
+
+if __name__ == "__main__":
+    seeding(42)
+
+    data_root = '../DRIVE'
+    test_x = sorted(glob(os.path.join(data_root, 'test', 'images', '*.tif')))
+    test_y = sorted(glob(os.path.join(data_root, 'test', '1st_manual', '*.gif')))
+
+    print(f"Test images: {len(test_x)}  |  Test masks: {len(test_y)}")
+    assert len(test_x) == len(test_y), "Mismatch between test images and masks"
+
+    H, W = 512, 512
+    size = (W, H)
+    checkpoint_path = 'files/checkpoint.pth'
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f'Device: {device}')
+
+    model = UNet(n_class=1).to(device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+
+    results_dir = 'results/Test'
+    create_dir(results_dir)
+
+    metrics_score = [0.0, 0.0, 0.0, 0.0, 0.0]
+    time_taken = []
+    individual_metrics = {}
+
+    for x_path, y_path in tqdm(zip(test_x, test_y), total=len(test_x)):
+        name = os.path.splitext(os.path.basename(x_path))[0]
+
+        image = cv2.imread(x_path, cv2.IMREAD_COLOR)
+        image = cv2.resize(image, size)
+        x = torch.from_numpy(
+            np.transpose((image / 255.0).astype(np.float32), (2, 0, 1))
+        ).unsqueeze(0).to(device)
+
+        raw_mask = imageio.v2.imread(y_path)
+        if raw_mask.ndim == 3:
+            raw_mask = raw_mask[:, :, 0]
+        mask = cv2.resize(raw_mask, size, interpolation=cv2.INTER_NEAREST)
+        y = torch.from_numpy(
+            np.expand_dims((mask / 255.0).astype(np.float32), axis=(0, 1))
+        ).to(device)
+
+        with torch.no_grad():
+            t0 = time.time()
+            pred = torch.sigmoid(model(x))
+            elapsed = time.time() - t0
+            time_taken.append(elapsed)
+
+            score = calculate_metrics(y, pred)
+            metrics_score = list(map(add, metrics_score, score))
+
+        individual_metrics[name] = {
+            'IoU':       score[0],
+            'F1':        score[1],
+            'Recall':    score[2],
+            'Precision': score[3],
+            'Accuracy':  score[4],
+            'Time_s':    elapsed,
+        }
+
+        pred_np = (pred[0, 0].cpu().numpy() > 0.5).astype(np.uint8) * 255
+        gt_np   = mask.astype(np.uint8)
+        line    = np.ones((H, 10, 3), dtype=np.uint8) * 128
+
+        def to_rgb(gray):
+            return np.stack([gray, gray, gray], axis=-1)
+
+        composite = np.concatenate([image, line, to_rgb(gt_np), line, to_rgb(pred_np)], axis=1)
+        cv2.imwrite(os.path.join(results_dir, f'{name}.png'), composite)
+
+    n = len(test_x)
+    mIoU, f1, recall, precision, acc = [s / n for s in metrics_score]
+
+    print(f'\nmIoU: {mIoU:.4f} | F1: {f1:.4f} | Recall: {recall:.4f} '
+          f'| Precision: {precision:.4f} | Acc: {acc:.4f}')
+    print(f'FPS: {1 / np.mean(time_taken):.2f}')
+
+    os.makedirs('results', exist_ok=True)
+    pd.DataFrame.from_dict(individual_metrics, orient='index').to_csv(
+        'results/individual_metrics.csv'
+    )
