@@ -30,9 +30,9 @@ def calculate_metrics(y_true, y_pred):
 if __name__ == "__main__":
     seeding(42)
 
-    data_root = '../DRIVE'
-    test_x = sorted(glob(os.path.join(data_root, 'test', 'images', '*.tif')))
-    test_y = sorted(glob(os.path.join(data_root, 'test', '1st_manual', '*.gif')))
+    data_root = '../new_data'
+    test_x = sorted(glob(os.path.join(data_root, 'test', 'image', '*.png')))
+    test_y = sorted(glob(os.path.join(data_root, 'test', '1st_manual', '*.png')))
 
     print(f"Test images: {len(test_x)}  |  Test masks: {len(test_y)}")
     assert len(test_x) == len(test_y), "Mismatch between test images and masks"

@@ -74,9 +74,9 @@ if __name__ == "__main__":
     output_path = os.path.join('files', now)
     create_dir(output_path)
 
-    data_root = '../DRIVE'
-    train_x = sorted(glob(os.path.join(data_root, 'training', 'images', '*.tif')))
-    train_y = sorted(glob(os.path.join(data_root, 'training', '1st_manual', '*.gif')))
+    data_root = '../new_data'
+    train_x = sorted(glob(os.path.join(data_root, 'train', 'image', '*.png')))
+    train_y = sorted(glob(os.path.join(data_root, 'train', '1st_manual', '*.png')))
 
     print(f"Total training samples: {len(train_x)}")
     assert len(train_x) == len(train_y), "Mismatch between images and masks"
