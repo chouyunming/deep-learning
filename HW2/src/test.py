@@ -1,3 +1,4 @@
+import argparse
 import os
 import time
 from operator import add
@@ -10,7 +11,7 @@ from tqdm import tqdm
 import torch
 from sklearn.metrics import accuracy_score, f1_score, jaccard_score, precision_score, recall_score
 
-from network import UNet
+from network import UNet, TransUNet, AttnUNet, R2UNet
 from utils import seeding, create_dir
 
 
@@ -28,9 +29,16 @@ def calculate_metrics(y_true, y_pred):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Test segmentation model on DRIVE dataset')
+    parser.add_argument('--model', choices=['unet', 'transunet', 'attnunet', 'r2unet'], default='unet',
+                        help='Model architecture to evaluate')
+    parser.add_argument('--checkpoint', type=str, default=None,
+                        help='Path to checkpoint .pth file (default: files/checkpoint.pth)')
+    args = parser.parse_args()
+
     seeding(42)
 
-    data_root = '../new_data'
+    data_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'new_data')
     test_x = sorted(glob(os.path.join(data_root, 'test', 'image', '*.png')))
     test_y = sorted(glob(os.path.join(data_root, 'test', '1st_manual', '*.png')))
 
@@ -39,17 +47,25 @@ if __name__ == "__main__":
 
     H, W = 512, 512
     size = (W, H)
-    checkpoint_path = 'files/checkpoint.pth'
+    src_dir = os.path.dirname(os.path.abspath(__file__))
+    checkpoint_path = args.checkpoint or os.path.join(src_dir, '..', 'files', 'checkpoint.pth')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Device: {device}')
 
-    model = UNet(n_class=1).to(device)
+    models = {
+        'unet':      UNet(n_class=1),
+        'transunet': TransUNet(n_class=1, img_size=H),
+        'attnunet':  AttnUNet(n_class=1),
+        'r2unet':    R2UNet(n_class=1),
+    }
+    model = models[args.model].to(device)
+    print(f"Model: {args.model}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
-    results_dir = 'results/Test'
+    results_dir = os.path.join(src_dir, '..', 'results', 'Test')
     create_dir(results_dir)
 
     metrics_score = [0.0, 0.0, 0.0, 0.0, 0.0]
@@ -60,6 +76,7 @@ if __name__ == "__main__":
         name = os.path.splitext(os.path.basename(x_path))[0]
 
         image = cv2.imread(x_path, cv2.IMREAD_COLOR)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, size)
         x = torch.from_numpy(
             np.transpose((image / 255.0).astype(np.float32), (2, 0, 1))
@@ -98,7 +115,8 @@ if __name__ == "__main__":
         def to_rgb(gray):
             return np.stack([gray, gray, gray], axis=-1)
 
-        composite = np.concatenate([image, line, to_rgb(gt_np), line, to_rgb(pred_np)], axis=1)
+        image_bgr = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        composite = np.concatenate([image_bgr, line, to_rgb(gt_np), line, to_rgb(pred_np)], axis=1)
         cv2.imwrite(os.path.join(results_dir, f'{name}.png'), composite)
 
     n = len(test_x)
@@ -108,7 +126,7 @@ if __name__ == "__main__":
           f'| Precision: {precision:.4f} | Acc: {acc:.4f}')
     print(f'FPS: {1 / np.mean(time_taken):.2f}')
 
-    os.makedirs('results', exist_ok=True)
+    os.makedirs(os.path.join(src_dir, '..', 'results'), exist_ok=True)
     pd.DataFrame.from_dict(individual_metrics, orient='index').to_csv(
-        'results/individual_metrics.csv'
+        os.path.join(src_dir, '..', 'results', 'individual_metrics.csv')
     )
