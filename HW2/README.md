@@ -83,44 +83,6 @@ Training saves:
 
 Testing is performed in `src/test.py` using the best checkpoint. Each test image is evaluated independently and results are saved to `results/individual_metrics.csv`.
 
-### Mean Test Metrics
-
-| Metric | Score |
-|---|---|
-| **mIoU** | 0.6099 |
-| **F1 (Dice)** | 0.7569 |
-| **Recall** | 0.7113 |
-| **Precision** | 0.8210 |
-| **Accuracy** | 0.9606 |
-
-### Per-Image Breakdown
-
-| Image | IoU | F1 | Recall | Precision | Accuracy |
-|---|---|---|---|---|---|
-| 01_test | 0.6546 | 0.7912 | 0.7794 | 0.8034 | 0.9634 |
-| 02_test | 0.6957 | 0.8206 | 0.7861 | 0.8582 | 0.9648 |
-| 03_test | 0.5352 | 0.6972 | 0.5689 | 0.9003 | 0.9510 |
-| 04_test | 0.6444 | 0.7837 | 0.7629 | 0.8057 | 0.9616 |
-| 05_test | 0.5994 | 0.7495 | 0.6523 | 0.8808 | 0.9592 |
-| 06_test | 0.5907 | 0.7427 | 0.6329 | 0.8986 | 0.9575 |
-| 07_test | 0.6099 | 0.7577 | 0.6936 | 0.8349 | 0.9593 |
-| 08_test | 0.5602 | 0.7181 | 0.6307 | 0.8336 | 0.9574 |
-| 09_test | 0.5548 | 0.7137 | 0.5895 | 0.9041 | 0.9618 |
-| 10_test | 0.6233 | 0.7680 | 0.7668 | 0.7691 | 0.9621 |
-| 11_test | 0.6058 | 0.7546 | 0.7105 | 0.8044 | 0.9589 |
-| 12_test | 0.6173 | 0.7634 | 0.7171 | 0.8160 | 0.9619 |
-| 13_test | 0.6249 | 0.7692 | 0.6849 | 0.8770 | 0.9598 |
-| 14_test | 0.6289 | 0.7722 | 0.7564 | 0.7887 | 0.9638 |
-| 15_test | 0.5495 | 0.7093 | 0.7237 | 0.6954 | 0.9579 |
-| 16_test | 0.6269 | 0.7707 | 0.7187 | 0.8308 | 0.9614 |
-| 17_test | 0.5668 | 0.7235 | 0.6183 | 0.8718 | 0.9599 |
-| 18_test | 0.6389 | 0.7796 | 0.7732 | 0.7862 | 0.9655 |
-| 19_test | 0.6468 | 0.7856 | 0.8496 | 0.7305 | 0.9615 |
-| 20_test | 0.6242 | 0.7686 | 0.8102 | 0.7311 | 0.9641 |
-
-### Training Loss Curve
-
-The training and validation loss curves (Dice+BCE) over 1000 epochs show steady convergence with the training loss reaching ~0.35 and validation loss plateauing around ~0.45. Some periodic spikes are visible, likely due to the small validation set size (4 images).
 
 ## 7. Project Structure
 
