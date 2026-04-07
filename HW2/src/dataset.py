@@ -7,28 +7,57 @@ from skimage.morphology import skeletonize, binary_dilation, diamond
 
 
 class DriveDataset(Dataset):
-    def __init__(self, images_path, masks_path, size=(512, 512), return_skel=False):
+    def __init__(self, images_path, masks_path, size=(512, 512), return_skel=False,
+                 patch_size=None):
         self.images_path = images_path
         self.masks_path = masks_path
         self.size = size
         self.return_skel = return_skel
+        self.patch_size = patch_size
+        if patch_size is not None:
+            self.patches_per_image = (size[0] // patch_size) * (size[1] // patch_size)
+        else:
+            self.patches_per_image = 1
 
     def __len__(self):
+        if self.patch_size is not None:
+            return len(self.images_path) * self.patches_per_image
         return len(self.images_path)
 
     def __getitem__(self, index):
-        image = cv2.imread(self.images_path[index], cv2.IMREAD_COLOR)
+        if self.patch_size is not None:
+            img_index = index // self.patches_per_image
+        else:
+            img_index = index
+
+        image = cv2.imread(self.images_path[img_index], cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, self.size)
         image = (image / 255.0).astype(np.float32)
-        image = np.transpose(image, (2, 0, 1))          # (3, H, W)
-        image = torch.from_numpy(image)
 
-        mask = imageio.v2.imread(self.masks_path[index])
+        mask = imageio.v2.imread(self.masks_path[img_index])
         if mask.ndim == 3:
             mask = mask[:, :, 0]
         mask = cv2.resize(mask, self.size, interpolation=cv2.INTER_NEAREST)
         mask = (mask / 255.0).astype(np.float32)
+
+        # Extract random patch if patch_size is set
+        if self.patch_size is not None:
+            h, w = image.shape[:2]
+            p = self.patch_size
+            top = np.random.randint(0, h - p + 1)
+            left = np.random.randint(0, w - p + 1)
+            image = image[top:top+p, left:left+p, :]
+            mask = mask[top:top+p, left:left+p]
+
+        # Random horizontal flip
+        if np.random.random() > 0.5:
+            image = np.flip(image, axis=1).copy()
+            mask = np.flip(mask, axis=1).copy()
+
+        image = np.transpose(image, (2, 0, 1))          # (3, H, W)
+        image = torch.from_numpy(image)
+
         mask = np.expand_dims(mask, axis=0)             # (1, H, W)
         mask = torch.from_numpy(mask)
 

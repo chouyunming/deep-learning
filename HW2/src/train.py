@@ -81,6 +81,10 @@ if __name__ == "__main__":
     parser.add_argument('--weight_ce',   type=float, default=1.0, help='Weight for BCE term (skel_rec only)')
     parser.add_argument('--weight_dice', type=float, default=1.0, help='Weight for Dice term (skel_rec only)')
     parser.add_argument('--weight_srec', type=float, default=1.0, help='Weight for Skeleton-Recall term (skel_rec only)')
+    parser.add_argument('--patch_size', type=int, default=None,
+                        help='Patch size for patch-based training (e.g. 48). Omit for full-image training.')
+    parser.add_argument('--pretrained', action='store_true',
+                        help='Load ViT-B/16 ImageNet pretrained weights for TransUNet')
     args = parser.parse_args()
 
     seeding(42)
@@ -106,24 +110,48 @@ if __name__ == "__main__":
     best_model_path = os.path.join(output_path, 'best_model.pth')
 
     use_skel = args.loss == 'skel_rec'
-    full_dataset = DriveDataset(train_x, train_y, size=(H, W), return_skel=use_skel)
-    val_dataset, train_dataset = random_split(
-        full_dataset, [val_split, len(full_dataset) - val_split],
-        generator=torch.Generator().manual_seed(42)
+    patch_size = args.patch_size
+
+    # Split image paths first, then create datasets with appropriate settings
+    n_val = val_split
+    n_train = len(train_x) - n_val
+    indices = list(range(len(train_x)))
+    gen = torch.Generator().manual_seed(42)
+    val_indices = torch.randperm(len(train_x), generator=gen)[:n_val].tolist()
+    train_indices = [i for i in indices if i not in val_indices]
+
+    train_dataset = DriveDataset(
+        [train_x[i] for i in train_indices],
+        [train_y[i] for i in train_indices],
+        size=(H, W), return_skel=use_skel,
+        patch_size=patch_size,
+    )
+    # Validation always uses full images
+    val_dataset = DriveDataset(
+        [train_x[i] for i in val_indices],
+        [train_y[i] for i in val_indices],
+        size=(H, W), return_skel=use_skel,
     )
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # For TransUNet, use patch_size for positional embedding if patch training is enabled
+    transunet_img_size = patch_size if patch_size else H
     models = {
         'unet':     UNet(n_class=1),
-        'transunet': TransUNet(n_class=1, img_size=H),
+        'transunet': TransUNet(n_class=1, img_size=transunet_img_size, pretrained=args.pretrained),
         'attnunet': AttnUNet(n_class=1),
         'r2unet':   R2UNet(n_class=1),
     }
     model = models[args.model].to(device)
     print(f"Model: {args.model}")
+    if patch_size:
+        patches_per_image = (H // patch_size) * (W // patch_size)
+        print(f"Patch-based training: {patch_size}x{patch_size}, {patches_per_image} patches/image")
+    else:
+        print(f"Full-image training: {H}x{W}")
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
     if use_skel:

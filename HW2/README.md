@@ -27,7 +27,11 @@ Standard encoder-decoder with skip connections. Encoder: 4 stages of double 3x3 
 
 ### 3.2 TransUNet
 
-Extends UNet by inserting a **Transformer encoder at the bottleneck**. After the CNN encoder produces a 512-channel feature map at 1/8 resolution, it is flattened into a token sequence, augmented with learned positional embeddings, and processed by a stack of Transformer encoder layers (default: 4 layers, 8 heads). The output is reshaped back to spatial form before the decoder.
+Extends UNet by inserting a **Transformer encoder at the bottleneck**. After the CNN encoder produces a 512-channel feature map at 1/8 resolution, it is flattened into a token sequence, augmented with learned positional embeddings, and processed by a stack of Transformer encoder layers. The output is reshaped back to spatial form before the decoder.
+
+- **Without `--pretrained`**: 512-dim, 8 heads, 4 layers (trained from scratch).
+- **With `--pretrained`**: ViT-B/16 architecture (768-dim, 12 heads, 3072 MLP) with linear projections (512<->768) bridging the UNet bottleneck. Loads first 4 encoder layers from torchvision's ImageNet-1K pretrained ViT-B/16 checkpoint.
+- Positional embeddings are automatically interpolated at inference time when input resolution differs from training (e.g., trained on 48x48 patches, tested on 512x512 full images).
 
 ### 3.3 Attention U-Net (AttnUNet)
 
@@ -71,6 +75,10 @@ The Skeleton-Recall loss requires a precomputed skeleton mask per sample. Skelet
 | **Validation split** | 4 images (held out from 20 training images) |
 | **Random seed** | 42 |
 | **Device** | CUDA (if available) |
+| **Patch size** | Optional (e.g., 48); full-image by default |
+| **Data augmentation** | Random horizontal flip |
+
+**Patch-based training**: When `--patch_size` is specified, random patches are extracted from each training image. The number of patches per image is automatically computed as `(H // patch_size) * (W // patch_size)`. Validation always uses full images. This is compatible with all loss functions including Skeleton-Recall (skeletonization is computed per-patch).
 
 Training saves:
 - `checkpoint.pth` — latest model state
@@ -106,7 +114,7 @@ HW2/
 │       └── 1st_manual/         # 20 test masks
 ├── src/
 │   ├── network.py              # UNet, TransUNet, AttnUNet, R2UNet
-│   ├── dataset.py              # DriveDataset (with optional skeletonization)
+│   ├── dataset.py              # DriveDataset (patch extraction, augmentation, skeletonization)
 │   ├── losses.py               # Dice, DiceBCE, SkeletonRecall, compound loss
 │   ├── train.py                # Training loop with checkpointing & visualization
 │   ├── test.py                 # Evaluation with per-image metrics
@@ -155,12 +163,21 @@ HW2/
 # Preprocess DRIVE data
 cd new_data && python data_process.py
 
-# Train with default DiceBCE loss
-cd src && python train.py
+# Train UNet with default DiceBCE loss (full-image)
+cd src && python train.py --model unet
 
 # Train with Skeleton-Recall compound loss
-cd src && python train.py --loss skel_rec --weight_ce 1.0 --weight_dice 1.0 --weight_srec 1.0
+cd src && python train.py --model unet --loss skel_rec --weight_ce 1.0 --weight_dice 1.0 --weight_srec 1.0
 
-# Evaluate on test set
-cd src && python test.py
+# Train with patch-based training (48x48 patches)
+cd src && python train.py --model r2unet --patch_size 48
+
+# Train TransUNet with pretrained ViT-B/16 + patches
+cd src && python train.py --model transunet --patch_size 48 --pretrained
+
+# Evaluate on test set (full 512x512 images)
+cd src && python test.py --model unet --checkpoint ../files/<run>/best_model.pth
+
+# Evaluate patch-trained TransUNet (specify training patch size + pretrained flag)
+cd src && python test.py --model transunet --train_patch_size 48 --pretrained --checkpoint ../files/<run>/best_model.pth
 ```

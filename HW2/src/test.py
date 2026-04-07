@@ -34,6 +34,12 @@ if __name__ == "__main__":
                         help='Model architecture to evaluate')
     parser.add_argument('--checkpoint', type=str, default=None,
                         help='Path to checkpoint .pth file (default: files/checkpoint.pth)')
+    parser.add_argument('--train_patch_size', type=int, default=None,
+                        help='Patch size used during training (for TransUNet pos_embed). '
+                             'Omit if trained on full images.')
+    parser.add_argument('--pretrained', action='store_true',
+                        help='Use ViT-B/16 architecture (768-dim) for TransUNet. '
+                             'Must match the flag used during training.')
     args = parser.parse_args()
 
     seeding(42)
@@ -53,9 +59,13 @@ if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Device: {device}')
 
+    # For TransUNet, init with training patch size so pos_embed shape matches checkpoint;
+    # interpolation in forward() handles the full-image inference resolution.
+    transunet_img_size = args.train_patch_size if args.train_patch_size else H
     models = {
         'unet':      UNet(n_class=1),
-        'transunet': TransUNet(n_class=1, img_size=H),
+        'transunet': TransUNet(n_class=1, img_size=transunet_img_size,
+                               pretrained=args.pretrained),
         'attnunet':  AttnUNet(n_class=1),
         'r2unet':    R2UNet(n_class=1),
     }

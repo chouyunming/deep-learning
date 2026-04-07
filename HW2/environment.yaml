@@ -17,4 +17,5 @@ dependencies:
     - torch
     - torchvision
     - scikit-learn
+    - scikit-image
     - pandas

@@ -118,6 +118,46 @@ class UNet(nn.Module):
         return out
 
 
+def _load_vit_b16_weights(transformer, num_layers):
+    """Load pretrained ViT-B/16 encoder weights into nn.TransformerEncoder.
+
+    Downloads torchvision's ViT-B/16 ImageNet-1K checkpoint and maps the
+    first `num_layers` encoder layers into the given TransformerEncoder.
+    """
+    url = 'https://download.pytorch.org/models/vit_b_16-c867db91.pth'
+    vit_state = torch.hub.load_state_dict_from_url(url, map_location='cpu', progress=True)
+
+    # torchvision key format  ->  nn.TransformerEncoderLayer key format
+    key_map = {
+        'self_attention.in_proj_weight': 'self_attn.in_proj_weight',
+        'self_attention.in_proj_bias':   'self_attn.in_proj_bias',
+        'self_attention.out_proj.weight': 'self_attn.out_proj.weight',
+        'self_attention.out_proj.bias':   'self_attn.out_proj.bias',
+        'mlp.0.weight': 'linear1.weight',
+        'mlp.0.bias':   'linear1.bias',
+        'mlp.3.weight': 'linear2.weight',
+        'mlp.3.bias':   'linear2.bias',
+        'ln_1.weight':  'norm1.weight',
+        'ln_1.bias':    'norm1.bias',
+        'ln_2.weight':  'norm2.weight',
+        'ln_2.bias':    'norm2.bias',
+    }
+
+    new_state = {}
+    for layer_idx in range(num_layers):
+        src_prefix = f'encoder.layers.encoder_layer_{layer_idx}.'
+        dst_prefix = f'layers.{layer_idx}.'
+        for src_suffix, dst_suffix in key_map.items():
+            src_key = src_prefix + src_suffix
+            dst_key = dst_prefix + dst_suffix
+            if src_key in vit_state:
+                new_state[dst_key] = vit_state[src_key]
+
+    missing, unexpected = transformer.load_state_dict(new_state, strict=False)
+    print(f"[ViT-B/16 pretrained] Loaded {len(new_state)} params into {num_layers} layers"
+          f" ({len(missing)} missing, {len(unexpected)} unexpected)")
+
+
 class TransUNet(UNet):
     """UNet with a Transformer encoder inserted at the bottleneck.
 
@@ -127,18 +167,40 @@ class TransUNet(UNet):
     positional embeddings), then reshaped back before being passed to the
     decoder.
 
+    When ``pretrained=True`` the Transformer uses ViT-B/16 dimensions
+    (embed_dim=768, num_heads=12, mlp_dim=3072) and loads ImageNet-1K
+    pretrained weights. Linear projections bridge the UNet's 512 channels
+    to/from the 768-dim Transformer.
+
     Args:
-        n_class   : number of output channels (default 1, binary segmentation)
-        img_size  : input spatial resolution; used to pre-compute seq_len
-        embed_dim : channel depth at the bottleneck (must match UNet's 512)
-        num_heads : attention heads in each Transformer layer
-        num_layers: number of stacked Transformer encoder layers
-        dropout   : dropout applied inside the Transformer layers
+        n_class    : number of output channels (default 1, binary segmentation)
+        img_size   : input spatial resolution; used to pre-compute seq_len
+        num_layers : number of stacked Transformer encoder layers
+        dropout    : dropout applied inside the Transformer layers
+        pretrained : use ViT-B/16 architecture and load ImageNet-1K weights
     """
 
     def __init__(self, n_class=1, img_size=512,
-                 embed_dim=512, num_heads=8, num_layers=4, dropout=0.1):
+                 num_layers=4, dropout=0.1, pretrained=False):
         super().__init__(n_class=n_class)
+
+        cnn_dim = 512  # UNet bottleneck channels
+        self._pretrained = pretrained
+        if pretrained:
+            embed_dim, num_heads, mlp_dim = 768, 12, 3072
+        else:
+            embed_dim, num_heads, mlp_dim = cnn_dim, 8, cnn_dim * 4
+
+        self._embed_dim = embed_dim
+        self._cnn_dim = cnn_dim
+
+        # Projection layers (identity when dims match)
+        if embed_dim != cnn_dim:
+            self.proj_in = nn.Linear(cnn_dim, embed_dim)
+            self.proj_out = nn.Linear(embed_dim, cnn_dim)
+        else:
+            self.proj_in = None
+            self.proj_out = None
 
         # After 3 max-pools the spatial size is img_size // 8
         bottleneck_size = img_size // 8
@@ -148,11 +210,14 @@ class TransUNet(UNet):
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=embed_dim, nhead=num_heads,
-            dim_feedforward=embed_dim * 4,
+            dim_feedforward=mlp_dim,
             dropout=dropout, batch_first=True
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         self.pos_embed = nn.Parameter(torch.zeros(1, seq_len, embed_dim))
+
+        if pretrained:
+            _load_vit_b16_weights(self.transformer, num_layers)
 
     def forward(self, x):
         # ---- Encoder (identical to UNet) ----
@@ -169,9 +234,27 @@ class TransUNet(UNet):
 
         # ---- Transformer bottleneck ----
         B, C, H, W = x.shape
-        x = x.flatten(2).transpose(1, 2)    # (B, H*W, C)
-        x = x + self.pos_embed
+        x = x.flatten(2).transpose(1, 2)    # (B, H*W, 512)
+
+        if self.proj_in is not None:
+            x = self.proj_in(x)              # (B, H*W, 768)
+
+        # Interpolate positional embedding if spatial size differs from training
+        seq_len = H * W
+        if self.pos_embed.shape[1] != seq_len:
+            pos = self.pos_embed.transpose(1, 2).reshape(
+                1, -1, self._bottleneck_hw, self._bottleneck_hw)
+            pos = nn.functional.interpolate(pos, size=(H, W), mode='bilinear', align_corners=False)
+            pos = pos.flatten(2).transpose(1, 2)
+            x = x + pos
+        else:
+            x = x + self.pos_embed
+
         x = self.transformer(x)
+
+        if self.proj_out is not None:
+            x = self.proj_out(x)             # (B, H*W, 512)
+
         x = x.transpose(1, 2).reshape(B, C, H, W)
 
         # ---- Decoder (identical to UNet) ----
