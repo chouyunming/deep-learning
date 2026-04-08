@@ -81,6 +81,7 @@ if __name__ == "__main__":
     parser.add_argument('--weight_ce',   type=float, default=1.0, help='Weight for BCE term (skel_rec only)')
     parser.add_argument('--weight_dice', type=float, default=1.0, help='Weight for Dice term (skel_rec only)')
     parser.add_argument('--weight_srec', type=float, default=1.0, help='Weight for Skeleton-Recall term (skel_rec only)')
+    parser.add_argument('--batch_size', type=int, default=4, help='Batch size for training')
     parser.add_argument('--patch_size', type=int, default=None,
                         help='Patch size for patch-based training (e.g. 48). Omit for full-image training.')
     parser.add_argument('--pretrained', action='store_true',
@@ -100,7 +101,7 @@ if __name__ == "__main__":
     assert len(train_x) == len(train_y), "Mismatch between images and masks"
 
     H, W = 512, 512
-    batch_size = 4
+    batch_size = args.batch_size
     num_epochs = 1000
     lr = 1e-4
     val_split = 4        # hold out 4 images for validation
