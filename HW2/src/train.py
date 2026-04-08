@@ -91,7 +91,10 @@ if __name__ == "__main__":
 
     seeding(42)
 
-    output_path = os.path.join('files', f'{args.model}-{args.loss}')
+    if args.patch_size is not None:
+        output_path = os.path.join('files', f'{args.model}-{args.loss}-p{args.patch_size}')
+    else:
+        output_path = os.path.join('files', f'{args.model}-{args.loss}')
     create_dir(output_path)
 
     data_root = os.path.join(os.path.dirname(__file__), '..', 'new_data')
