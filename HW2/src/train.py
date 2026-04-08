@@ -3,10 +3,9 @@ import os
 import time
 from glob import glob
 import numpy as np
-from datetime import datetime
 import matplotlib.pyplot as plt
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 
 from dataset import DriveDataset
 from network import UNet, TransUNet, AttnUNet, R2UNet
