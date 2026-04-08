@@ -140,5 +140,5 @@ if __name__ == "__main__":
 
     os.makedirs(os.path.join(src_dir, '..', 'results'), exist_ok=True)
     pd.DataFrame.from_dict(individual_metrics, orient='index').to_csv(
-        os.path.join(src_dir, '..', 'results', 'individual_metrics.csv')
+        os.path.join(src_dir, '..', 'results', run_name, 'individual_metrics.csv')
     )
