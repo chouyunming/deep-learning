@@ -30,10 +30,8 @@ def calculate_metrics(y_true, y_pred):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Test segmentation model on DRIVE dataset')
-    parser.add_argument('--model', choices=['unet', 'transunet', 'attnunet', 'r2unet'], default='unet',
-                        help='Model architecture to evaluate')
-    parser.add_argument('--checkpoint', type=str, default=None,
-                        help='Path to checkpoint .pth file (default: files/checkpoint.pth)')
+    parser.add_argument('--checkpoint', type=str, required=True,
+                        help='Path to checkpoint .pth file (e.g. ../files/unet-dice_bce/best_model.pth)')
     parser.add_argument('--train_patch_size', type=int, default=None,
                         help='Patch size used during training (for TransUNet pos_embed). '
                              'Omit if trained on full images.')
@@ -54,7 +52,11 @@ if __name__ == "__main__":
     H, W = 512, 512
     size = (W, H)
     src_dir = os.path.dirname(os.path.abspath(__file__))
-    checkpoint_path = args.checkpoint or os.path.join(src_dir, '..', 'files', f'{args.model}-{args.loss}', 'checkpoint.pth')
+    checkpoint_path = args.checkpoint
+
+    # Derive model name from checkpoint directory (format: {model}-{loss})
+    run_name = os.path.basename(os.path.dirname(os.path.abspath(checkpoint_path)))
+    model_name = run_name.split('-', 1)[0]
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Device: {device}')
@@ -69,13 +71,13 @@ if __name__ == "__main__":
         'attnunet':  AttnUNet(n_class=1),
         'r2unet':    R2UNet(n_class=1),
     }
-    model = models[args.model].to(device)
-    print(f"Model: {args.model}")
+    model = models[model_name].to(device)
+    print(f"Model: {model_name}")
     checkpoint = torch.load(checkpoint_path, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
-    results_dir = os.path.join(src_dir, '..', 'results', f'{args.model}-{args.loss}')
+    results_dir = os.path.join(src_dir, '..', 'results', run_name)
     create_dir(results_dir)
 
     metrics_score = [0.0, 0.0, 0.0, 0.0, 0.0]
