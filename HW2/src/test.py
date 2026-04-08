@@ -54,7 +54,7 @@ if __name__ == "__main__":
     H, W = 512, 512
     size = (W, H)
     src_dir = os.path.dirname(os.path.abspath(__file__))
-    checkpoint_path = args.checkpoint or os.path.join(src_dir, '..', 'files', 'checkpoint.pth')
+    checkpoint_path = args.checkpoint or os.path.join(src_dir, '..', 'files', f'{args.model}-{args.loss}', 'checkpoint.pth')
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f'Device: {device}')
@@ -75,7 +75,7 @@ if __name__ == "__main__":
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
 
-    results_dir = os.path.join(src_dir, '..', 'results', 'Test')
+    results_dir = os.path.join(src_dir, '..', 'results', f'{args.model}-{args.loss}')
     create_dir(results_dir)
 
     metrics_score = [0.0, 0.0, 0.0, 0.0, 0.0]

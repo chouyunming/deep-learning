@@ -89,8 +89,7 @@ if __name__ == "__main__":
 
     seeding(42)
 
-    now = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    output_path = os.path.join('files', now)
+    output_path = os.path.join('files', f'{args.model}-{args.loss}')
     create_dir(output_path)
 
     data_root = os.path.join(os.path.dirname(__file__), '..', 'new_data')
