@@ -11,38 +11,6 @@ def double_conv(in_channels, out_channels):
     )
 
 
-class Recurrent_block(nn.Module):
-    def __init__(self, ch_out, t=2):
-        super().__init__()
-        self.t = t
-        self.conv = nn.Sequential(
-            nn.Conv2d(ch_out, ch_out, kernel_size=3, stride=1, padding=1, bias=True),
-            nn.BatchNorm2d(ch_out),
-            nn.ReLU(inplace=True)
-        )
-
-    def forward(self, x):
-        x1 = self.conv(x)
-        for _ in range(1, self.t):
-            x1 = self.conv(x + x1)
-        return x1
-
-
-class RRCNN_block(nn.Module):
-    def __init__(self, ch_in, ch_out, t=2):
-        super().__init__()
-        self.Conv_1x1 = nn.Conv2d(ch_in, ch_out, kernel_size=1, stride=1, padding=0)
-        self.RCNN = nn.Sequential(
-            Recurrent_block(ch_out, t=t),
-            Recurrent_block(ch_out, t=t)
-        )
-
-    def forward(self, x):
-        x = self.Conv_1x1(x)
-        x1 = self.RCNN(x)
-        return x + x1
-
-
 class Attention_block(nn.Module):
     def __init__(self, F_g, F_l, F_int):
         super().__init__()
@@ -322,29 +290,6 @@ class AttnUNet(UNet):
         return self.conv_last(x)
 
 
-class R2UNet(UNet):
-    """Recurrent Residual U-Net: replaces every double-conv block with an
-    RRCNN block (1×1 projection + two stacked Recurrent_blocks + residual).
-
-    Args:
-        n_class: number of output channels (default 1)
-        t      : number of recurrent iterations inside each Recurrent_block
-    """
-
-    def __init__(self, n_class=1, t=2):
-        super().__init__(n_class=n_class)
-        # Replace all double_conv layers with RRCNN blocks.
-        # Channel layout is identical to UNet so forward() is inherited as-is.
-        self.dconv_down1 = RRCNN_block(3,         64,  t=t)
-        self.dconv_down2 = RRCNN_block(64,        128, t=t)
-        self.dconv_down3 = RRCNN_block(128,       256, t=t)
-        self.dconv_down4 = RRCNN_block(256,       512, t=t)
-        self.dconv_up3   = RRCNN_block(512 + 256, 256, t=t)
-        self.dconv_up2   = RRCNN_block(256 + 128, 128, t=t)
-        self.dconv_up1   = RRCNN_block(128 + 64,  64,  t=t)
-        # forward() is fully inherited from UNet — no override needed.
-
-
 if __name__ == "__main__":
     x = torch.randn((2, 3, 512, 512))
 
@@ -356,6 +301,3 @@ if __name__ == "__main__":
 
     attnunet = AttnUNet(n_class=1)
     print("AttnUNet output: ", attnunet(x).shape)   # (2, 1, 512, 512)
-
-    r2unet = R2UNet(n_class=1, t=2)
-    print("R2UNet output:   ", r2unet(x).shape)     # (2, 1, 512, 512)

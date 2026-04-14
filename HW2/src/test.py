@@ -11,8 +11,9 @@ from tqdm import tqdm
 import torch
 from sklearn.metrics import accuracy_score, f1_score, jaccard_score, precision_score, recall_score
 
-from network import UNet, TransUNet, AttnUNet, R2UNet
+from network import UNet, TransUNet, AttnUNet
 from utils import seeding, create_dir
+from dataset import apply_clahe
 
 
 def calculate_metrics(y_true, y_pred):
@@ -38,6 +39,9 @@ if __name__ == "__main__":
     parser.add_argument('--pretrained', action='store_true',
                         help='Use ViT-B/16 architecture (768-dim) for TransUNet. '
                              'Must match the flag used during training.')
+    parser.add_argument('--clahe', action='store_true',
+                        help='Enable CLAHE preprocessing at inference. '
+                             'Must match the setting used during training.')
     args = parser.parse_args()
 
     seeding(42)
@@ -69,7 +73,6 @@ if __name__ == "__main__":
         'transunet': TransUNet(n_class=1, img_size=transunet_img_size,
                                pretrained=args.pretrained),
         'attnunet':  AttnUNet(n_class=1),
-        'r2unet':    R2UNet(n_class=1),
     }
     model = models[model_name].to(device)
     print(f"Model: {model_name}")
@@ -90,6 +93,8 @@ if __name__ == "__main__":
         image = cv2.imread(x_path, cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = cv2.resize(image, size)
+        if args.clahe:
+            image = apply_clahe(image)
         x = torch.from_numpy(
             np.transpose((image / 255.0).astype(np.float32), (2, 0, 1))
         ).unsqueeze(0).to(device)

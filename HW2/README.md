@@ -37,17 +37,11 @@ Extends UNet by inserting a **Transformer encoder at the bottleneck**. After the
 
 Adds **attention gates** on every skip connection. Before concatenation, encoder features are recalibrated by a gating signal from the decoder path, suppressing irrelevant spatial activations. Uses intermediate channel dimensions of F_int = F_l / 2.
 
-### 3.4 Recurrent Residual U-Net (R2UNet)
-
-Replaces every double-conv block with an **RRCNN block**: a 1x1 projection followed by two stacked Recurrent Blocks (each iterating `t=2` times) with a residual connection. The forward pass is fully inherited from UNet since the module interfaces are preserved.
-
 ### Supporting Modules
 
 | Module | Description |
 |---|---|
 | `double_conv` | Two 3x3 Conv + ReLU layers |
-| `Recurrent_block` | Conv-BN-ReLU iterated `t` times with additive feedback |
-| `RRCNN_block` | 1x1 Conv + 2x Recurrent_block + residual |
 | `Attention_block` | Dual-path gating: W_g(g) + W_x(x) -> sigmoid attention map |
 
 ## 4. Loss Functions
@@ -113,7 +107,7 @@ HW2/
 │       ├── image/              # 20 test images
 │       └── 1st_manual/         # 20 test masks
 ├── src/
-│   ├── network.py              # UNet, TransUNet, AttnUNet, R2UNet
+│   ├── network.py              # UNet, TransUNet, AttnUNet
 │   ├── dataset.py              # DriveDataset (patch extraction, augmentation, skeletonization)
 │   ├── losses.py               # Dice, DiceBCE, SkeletonRecall, compound loss
 │   ├── train.py                # Training loop with checkpointing & visualization
@@ -132,7 +126,6 @@ HW2/
 ├── requirements.txt            # pip dependencies
 ├── AttnU-Net.pdf               # Reference paper
 ├── FSG-Net.pdf                 # Reference paper
-├── R2U-Net.pdf                 # Reference paper
 ├── TransUNet.pdf               # Reference paper
 ├── UNet++.pdf                  # Reference paper
 └── skeleton-loss.pdf           # Reference paper (Skeleton-Recall loss)
@@ -152,7 +145,6 @@ HW2/
 |---|---|
 | **TransUNet** | Transformer-augmented U-Net for medical image segmentation |
 | **Attention U-Net** | Attention gates for skip connections |
-| **R2U-Net** | Recurrent Residual Convolutional Neural Network |
 | **UNet++** | Nested and dense skip connections |
 | **FSG-Net** | Fine-grained Semantics-aware Graph matching |
 | **Skeleton-Recall** | Skeleton-Recall loss for improved topology in segmentation |
@@ -170,7 +162,7 @@ cd src && python train.py --model unet
 cd src && python train.py --model unet --loss skel_rec --weight_ce 1.0 --weight_dice 1.0 --weight_srec 1.0
 
 # Train with patch-based training (48x48 patches)
-cd src && python train.py --model r2unet --patch_size 48
+cd src && python train.py --model attnunet --patch_size 48
 
 # Train TransUNet with pretrained ViT-B/16 + patches
 cd src && python train.py --model transunet --patch_size 48 --pretrained

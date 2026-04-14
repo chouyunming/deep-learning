@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 from dataset import DriveDataset
-from network import UNet, TransUNet, AttnUNet, R2UNet
+from network import UNet, TransUNet, AttnUNet
 from losses import DiceBCELoss, DC_SkelREC_and_CE_loss
 from utils import seeding, create_dir, epoch_time
 
@@ -75,7 +75,7 @@ def save_predictions(model, sample_x, sample_y, path, epoch, device):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train segmentation model on DRIVE dataset')
-    parser.add_argument('--model', choices=['unet', 'transunet', 'attnunet', 'r2unet'], default='unet',
+    parser.add_argument('--model', choices=['unet', 'transunet', 'attnunet'], default='unet',
                         help='Model architecture to train')
     parser.add_argument('--loss', choices=['dice_bce', 'skel_rec'], default='dice_bce',
                         help='Loss function: dice_bce (Dice+BCE) or skel_rec (Dice+SkeletonRecall+BCE)')
@@ -87,6 +87,10 @@ if __name__ == "__main__":
                         help='Patch size for patch-based training (e.g. 48). Omit for full-image training.')
     parser.add_argument('--pretrained', action='store_true',
                         help='Load ViT-B/16 ImageNet pretrained weights for TransUNet')
+    parser.add_argument('--clahe', action='store_true',
+                        help='Enable CLAHE preprocessing on train + val')
+    parser.add_argument('--augment', action='store_true',
+                        help='Enable training-time augmentations (flips, rotation, elastic)')
     args = parser.parse_args()
 
     seeding(42)
@@ -129,13 +133,16 @@ if __name__ == "__main__":
         [train_y[i] for i in train_indices],
         size=(H, W), return_skel=use_skel,
         patch_size=patch_size,
+        augment=args.augment, clahe=args.clahe,
     )
-    # Validation always uses full images
+    # Validation always uses full images with no augmentation
     val_dataset = DriveDataset(
         [train_x[i] for i in val_indices],
         [train_y[i] for i in val_indices],
         size=(H, W), return_skel=use_skel,
+        augment=False, clahe=args.clahe,
     )
+    print(f"Preprocessing: CLAHE={args.clahe}  |  Augment={args.augment}")
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -147,7 +154,6 @@ if __name__ == "__main__":
         'unet':     UNet(n_class=1),
         'transunet': TransUNet(n_class=1, img_size=transunet_img_size, pretrained=args.pretrained),
         'attnunet': AttnUNet(n_class=1),
-        'r2unet':   R2UNet(n_class=1),
     }
     model = models[args.model].to(device)
     print(f"Model: {args.model}")

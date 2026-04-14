@@ -3,6 +3,7 @@ _temp/
 *.csv
 *.zip
 *.pth
+*.pdf
 check_data_process/
 DRIVE/
 files/
@@ -23,3 +24,4 @@ test_results/
 plot_losses.py
 train.pkl
 training_loss.png
+src_description.txt
